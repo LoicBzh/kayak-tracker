@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<meta name="theme-color" content="#0A1929">
+<title>Kayak Tracker</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root{--bg:#0A1929;--card:#132F4C;--accent:#FF6B35;--text:#E7EBF0}
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+html,body{height:100%;background:var(--bg);color:var(--text)}
+body{display:flex;flex-direction:column}
+.nav{display:flex;background:var(--card);padding:4px;gap:4px;flex-shrink:0}
+.nav button{flex:1;padding:10px;background:transparent;border:none;color:var(--text);font-weight:600;border-radius:8px}
+.nav button.active{background:var(--accent);color:white}
+.container{flex:1;display:flex;flex-direction:column;padding:12px;gap:12px;overflow:auto}
+.card{background:var(--card);border-radius:16px;padding:8px}
+.screen{display:flex;flex-direction:column;flex:1;gap:12px}
+.screen.hidden{display:none}
+.instant-speed{text-align:center;padding:16px 0;position:relative;flex:1;display:flex;flex-direction:column;justify-content:center}
+.instant-speed.label{font-size:0.9rem;opacity:0.8;margin-bottom:4px}
+.instant-speed.unit{font-size:1.1rem;opacity:0.8}
+.clock{position:absolute;bottom:10px;right:10px;font-size:2.5rem;opacity:0.95;font-weight:600}
+.timer{font-size:2.8rem;text-align:center;margin:6px 0 4px 0;font-variant-numeric:tabular-nums;font-weight:700;opacity:0.8}
+.controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
+button{border:none;border-radius:12px;padding:14px;font-size:0.95rem;font-weight:600;color:white;cursor:pointer}
+.start{background:#1DB954}.pause{background:#FFA500}.stop{background:#E22134}
+button:disabled{opacity:0.4}
+
+.history-list{
+  flex:1;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  position:relative;
+}
+
+.history-header-row{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:var(--card);
+  display:grid;
+  grid-template-columns:2fr 1fr 1fr 1fr;
+  gap:8px;
+  padding:10px 12px;
+  font-size:0.8rem;
+  opacity:0.6;
+  text-transform:uppercase;
+  font-weight:600;
+  border-bottom:1px solid #ffffff1a;
+}
+
+.history-header-row div:nth-child(2){padding-left:40px;}
+.history-header-row div:nth-child(3){padding-left:35px;}
+.history-header-row div:nth-child(4){padding-left:20px;}
+
+.history-item{padding:12px 0;border-bottom:1px solid #ffffff1a}
+.history-header{
+  display:grid;
+  grid-template-columns:2fr 1fr 1fr 1fr;
+  gap:8px;
+  align-items:center;
+  padding:0 12px;
+}
+.history-date{font-size:0.9rem}
+.history-stats{display:contents;font-size:0.8rem;opacity:0.7}
+
+.history-stats span:nth-child(1){padding-left:10px;display:block;}
+.history-stats span:nth-child(2){padding-left:25px;display:block;}
+.history-stats span:nth-child(3){padding-left:20px;display:block;}
+
+.history-notes{font-size:0.85rem;margin:8px 12px 0 12px;padding:8px;background:#1a2f4a;border-radius:8px;white-space:pre-wrap}
+.history-actions{display:flex;gap:8px}
+.icon-btn{background:#ffffff1a;padding:8px 12px;font-size:0.85rem;border-radius:8px}
+.delete-btn{background:#E22134}
+.export-btn{background:#0B3D91}
+.view-btn{background:#FF6B35}
+
+.notes-area{flex:1;display:flex;flex-direction:column}
+.notes-area textarea{flex:1;background:#1a2f4a;border:1px solid #ffffff1a;border-radius:12px;color:var(--text);padding:12px;font-size:0.95rem;resize:none;font-family:inherit}
+.notes-area textarea:focus{outline:2px solid var(--accent);border-color:transparent}
+.notes-save{background:var(--accent);margin-top:8px}
+.status{font-size:0.8rem;text-align:center;opacity:0.7;margin-top:6px}
+.error{color:#E22134;font-size:0.8rem;text-align:center;margin-top:6px}
+.clear-all{background:transparent;border:1px solid #E22134;color:#E22134;width:100%;margin-top:8px;padding:12px;flex-shrink:0}
+
+.map-container{
+  display:none;
+  margin-top:8px;
+  height:240px;
+}
+.map-container.active{display:block}
+
+.map{
+  height:240px!important;
+  width:100%;
+  border-radius:12px;
+  background:#0a0a0a;
+  position:relative;
+}
+
+.map canvas{width:100%;height:100%;border-radius:12px}
+#liveMap, #historyMap{height:50vh;width:100%;border-radius:12px}
+.leaflet-container{background:#0a0a0a}
+
+.stats-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:12px;
+}
+.stat-card{
+  background:#1a2f4a;
+  border-radius:14px;
+  padding:14px 8px;
+  text-align:center;
+}
+.stat-label{
+  font-size:0.85rem;
+  opacity:0.75;
+  text-transform:uppercase;
+  font-weight:600;
+  letter-spacing:0.5px;
+  margin-bottom:6px;
+}
+.stat-value{
+  font-size:2.1rem;
+  font-weight:700;
+  color:#fff;
+  line-height:1.2;
+  opacity:0.75;
+}
+
+.watermark {
+  position: fixed;
+  top: 35px;
+  left: 26px;
+  writing-mode: vertical-lr;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  transform-origin: left bottom;
+  font-size: 12px;
+  color: #94a3b8;
+  opacity: 0.6;
+  z-index: 1000;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<div class="watermark">Built by Loïc D.</div>
+
+<div class="nav">
+  <button id="navSpeed" class="active" onclick="switchScreen('speed')">Vitesse</button>
+  <button id="navHistory" onclick="switchScreen('history')">Historique</button>
+  <button id="navNotes" onclick="switchScreen('notes')">Notes</button>
+  <button id="navMap" onclick="switchScreen('map')">Carte</button>
+</div>
+<div class="container">
+  <div class="screen" id="screenSpeed">
+    <div class="card instant-speed">
+      <div class="label">VITESSE INSTANTANÉE</div>
+      <div class="value" id="speedInst" style="font-size:6rem;font-weight:700;color:#FFF;line-height:1;">0.0</div>
+      <div class="unit">km/h</div>
+      <div class="clock" id="clock">00:00</div>
+    </div>
+    <div class="card">
+      <div class="timer" id="timer">00:00:00</div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Distance</div>
+          <div class="stat-value"><span id="dist">0.00</span> km</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Moyenne</div>
+          <div class="stat-value"><span id="speedAvg">0.0</span> km/h</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Max</div>
+          <div class="stat-value"><span id="speedMax">0.0</span> km/h</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Durée totale</div>
+          <div class="stat-value" id="duration">0:00</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="start" id="startBtn" onclick="startTracking()">Start</button>
+        <button class="pause" id="pauseBtn" onclick="if(confirm(isPaused? 'Reprendre la session?' : 'Mettre en pause la session?')) togglePause()" disabled>Pause</button>
+        <button class="stop" id="stopBtn" onclick="if(confirm('Arrêter et sauvegarder la session?')) stopTracking()" disabled>Stop</button>
+      </div>
+      <div class="status" id="status">GPS en attente...</div>
+      <div class="error" id="error"></div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="screenHistory">
+    <div class="card" style="flex:1;display:flex;flex-direction:column;overflow:hidden;padding:0">
+      <h3 style="padding:12px 12px 0 12px;font-size:0.95rem">Historique</h3>
+      <div class="history-list" id="history"></div>
+      <button class="clear-all" id="clearAllBtn" onclick="clearAllHistory()">Vider tout l’historique</button>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="screenNotes">
+    <div class="card notes-area">
+      <h3 style="margin-bottom:8px;font-size:0.95rem">Notes de session</h3>
+      <textarea id="notesInput" placeholder="Tape tes notes ici... Conditions, ressenti, technique..."></textarea>
+      <button class="notes-save" id="saveNotesBtn" onclick="saveNotes()">Sauvegarder</button>
+      <div class="status" id="notesStatus"></div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="screenMap">
+    <div class="card" style="flex:1;display:flex;flex-direction:column;padding:0;overflow:hidden">
+      <div id="liveMap"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js');
+}
+
+const el = id => document.getElementById(id);
+
+let watchId=null, wakeLock=null;
+let isTracking=false, isPaused=false;
+let startTime=0, pausedTime=0, pauseStart=0;
+let timerInterval=null, totalTimerInterval=null, clockInterval=null;
+let totalElapsed=0;
+let totalDist=0, maxSpeed=0;
+let lastPosition=null;
+let sessionPositions=[];
+let currentSessionNotes='';
+let liveMap=null, livePolyline=null, livePositionMarker=null;
+let historyMaps={};
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => {
+        if (isTracking &&!isPaused) {
+          requestWakeLock();
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Wake Lock erreur:', err);
+  }
+}
+
+async function releaseWakeLock() {
+  if (wakeLock) {
+    await wakeLock.release();
+    wakeLock = null;
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && isTracking &&!isPaused) {
+    requestWakeLock();
+  }
+});
+
+function showError(msg){
+  el('error').textContent = msg;
+  el('status').textContent = '';
+}
+
+function clearError(){
+  el('error').textContent = '';
+}
+
+function showStatus(msg){
+  el('status').textContent = msg;
+  el('error').textContent = '';
+}
+
+function switchScreen(screen){
+  ['screenSpeed','screenHistory','screenNotes','screenMap'].forEach(id => el(id).classList.add('hidden'));
+  ['navSpeed','navHistory','navNotes','navMap'].forEach(id => el(id).classList.remove('active'));
+
+  if(screen==='speed'){
+    el('screenSpeed').classList.remove('hidden');
+    el('navSpeed').classList.add('active');
+  }
+  if(screen==='history'){
+    el('screenHistory').classList.remove('hidden');
+    el('navHistory').classList.add('active');
+    loadHistory();
+  }
+  if(screen==='notes'){
+    el('screenNotes').classList.remove('hidden');
+    el('navNotes').classList.add('active');
+    loadCurrentNotes();
+  }
+  if(screen==='map'){
+    el('screenMap').classList.remove('hidden');
+    el('navMap').classList.add('active');
+    initLiveMap();
+  }
+}
+
+function updateClock(){
+  const now = new Date();
+  el('clock').textContent = now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+}
+
+function formatTime(ms){
+  const s = Math.floor(ms/1000);
+  return `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371e3, φ1=lat1*Math.PI/180, φ2=lat2*Math.PI/180;
+  const Δφ=(lat2-lat1)*Math.PI/180, Δλ=(lon2-lon1)*Math.PI/180;
+  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function initLiveMap(){
+  if(liveMap) {
+    liveMap.invalidateSize();
+    if(sessionPositions.length > 1) updateLiveTrack();
+    if(lastPosition) updatePositionMarker(lastPosition);
+    return;
+  }
+  liveMap = L.map('liveMap', {zoomControl:false, attributionControl:false}).setView([46.5, 2], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(liveMap);
+  if(sessionPositions.length > 1) {
+    updateLiveTrack();
+    liveMap.fitBounds(livePolyline.getBounds(), {padding:[20,20]});
+  } else if(lastPosition) {
+    liveMap.setView([lastPosition.coords.latitude, lastPosition.coords.longitude], 15);
+    updatePositionMarker(lastPosition);
+  }
+}
+
+function updatePositionMarker(pos){
+  if(!liveMap ||!pos) return;
+  const latlng = [pos.coords.latitude, pos.coords.longitude];
+  if(livePositionMarker){
+    livePositionMarker.setLatLng(latlng);
+  } else {
+    livePositionMarker = L.circleMarker(latlng, {
+      color:'#1DB954',
+      fillColor:'#1DB954',
+      fillOpacity:0.9,
+      radius:8,
+      weight:2
+    }).addTo(liveMap);
+  }
+}
+
+function updateLiveTrack(){
+  if(!liveMap) return;
+  const latlngs = sessionPositions.map(p => [p.lat, p.lon]);
+  if(livePolyline) {
+    livePolyline.setLatLngs(latlngs);
+  } else {
+    livePolyline = L.polyline(latlngs, {
+      color:'#FF6B35',
+      weight:4,
+      opacity:0.9
+    }).addTo(liveMap);
+  }
+  if(latlngs.length > 1) {
+    liveMap.fitBounds(livePolyline.getBounds(), {padding:[20,20]});
+  }
+}
+
+function updateUI(pos){
+  if(!pos) return;
+  let speedKmh = pos.coords.speed? pos.coords.speed * 3.6 : 0;
+  if(speedKmh < 0.5) speedKmh = 0;
+  if (!isPaused) el('speedInst').textContent = speedKmh.toFixed(1);
+  updatePositionMarker(pos);
+
+  if(isTracking && lastPosition &&!isPaused){
+    const d = haversine(lastPosition.coords.latitude, lastPosition.coords.longitude, pos.coords.latitude, pos.coords.longitude);
+    if(d > 1.0) {
+      totalDist += d;
+      sessionPositions.push({lat: pos.coords.latitude, lon: pos.coords.longitude, ele: pos.coords.altitude || 0, time: new Date(pos.timestamp).toISOString()});
+      if(liveMap) updateLiveTrack();
+    }
+  }
+
+  if(isTracking &&!isPaused){
+    const activeElapsed = Date.now() - startTime - pausedTime;
+    const avgSpeed = totalDist > 0? (totalDist/1000) / (activeElapsed/3600000) : 0;
+    if(speedKmh > 0) maxSpeed = Math.max(maxSpeed, speedKmh);
+    el('dist').textContent = (totalDist/1000).toFixed(2);
+    el('speedAvg').textContent = avgSpeed.toFixed(1);
+    el('speedMax').textContent = maxSpeed.toFixed(1);
+  }
+
+  lastPosition = pos;
+}
+
+function startGPS(){
+  if(!navigator.geolocation){
+    showError('GPS non supporté');
+    return;
+  }
+  showStatus('Recherche GPS...');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      lastPosition = pos;
+      updateUI(pos);
+      showStatus('GPS prêt');
+      if(liveMap) {
+        liveMap.setView([pos.coords.latitude, pos.coords.longitude], 15);
+        updatePositionMarker(pos);
+      }
+    },
+    (e) => {
+      showStatus('GPS en attente...');
+    },
+    {enableHighAccuracy:true, maximumAge:0, timeout:10000}
+  );
+}
+
+function startWatch(){
+  if(watchId) navigator.geolocation.clearWatch(watchId);
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      if(!lastPosition) lastPosition = pos;
+      updateUI(pos);
+      showStatus('GPS prêt');
+      clearError();
+    },
+    e => {
+      let msg = `Erreur GPS ${e.code}: `;
+      if(e.code===1) msg += 'Permission refusée';
+      if(e.code===2) msg += 'Position indisponible';
+      if(e.code===3) msg += 'Timeout';
+      showError(msg);
+      showStatus('');
+    },
+    {enableHighAccuracy:true, maximumAge:0, timeout:20000}
+  );
+}
+
+function stopWatch(){
+  if(watchId) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+}
+
+async function startTracking(){
+  clearError();
+  startGPS();
+
+  if(!lastPosition){
+    showError('GPS pas prêt. Attends 5s et réessaie.');
+    return;
+  }
+
+  startTime = Date.now();
+  pausedTime = 0;
+  totalElapsed = 0;
+  sessionPositions = [];
+  totalDist = 0;
+  maxSpeed = 0;
+  isTracking = true;
+  isPaused = false;
+  currentSessionNotes = el('notesInput').value;
+
+  await requestWakeLock();
+  startWatch();
+
+  timerInterval = setInterval(() => {
+    const activeElapsed = Date.now() - startTime - pausedTime;
+    el('timer').textContent = formatTime(activeElapsed);
+  }, 1000);
+
+  totalTimerInterval = setInterval(() => {
+    totalElapsed = Date.now() - startTime;
+    el('duration').textContent = formatTime(totalElapsed).slice(3);
+  }, 1000);
+
+  clockInterval = setInterval(updateClock, 1000);
+  updateClock();
+  showStatus('Tracking en cours...');
+  el('startBtn').disabled = true;
+  el('pauseBtn').disabled = false;
+  el('stopBtn').disabled = false;
+}
+
+async function togglePause(){
+  if(el('pauseBtn').disabled) return;
+  if(!isPaused){
+    isPaused = true;
+    pauseStart = Date.now();
+    clearInterval(timerInterval);
+    stopWatch();
+    showStatus('En pause');
+    el('pauseBtn').textContent = 'Reprendre';
+    await releaseWakeLock();
+  } else {
+    isPaused = false;
+    pausedTime += Date.now() - pauseStart;
+    timerInterval = setInterval(() => {
+      const activeElapsed = Date.now() - startTime - pausedTime;
+      el('timer').textContent = formatTime(activeElapsed);
+    }, 1000);
+    startWatch();
+    showStatus('Tracking en cours...');
+    el('pauseBtn').textContent = 'Pause';
+    await requestWakeLock();
+  }
+}
+
+async function stopTracking(){
+  if(watchId) navigator.geolocation.clearWatch(watchId);
+  clearInterval(timerInterval);
+  clearInterval(totalTimerInterval);
+  clearInterval(clockInterval);
+  stopWatch();
+  await releaseWakeLock();
+  isTracking = false;
+
+  const activeElapsed = Date.now() - startTime - pausedTime; // Temps de pagaie
+  const totalElapsed = Date.now() - startTime; // Temps total avec pauses
+
+  const session = {
+    id: Date.now(),
+    date: new Date().toLocaleString('fr-FR'),
+    distance: (totalDist/1000).toFixed(2),
+    avgSpeed: el('speedAvg').textContent,
+    maxSpeed: maxSpeed.toFixed(1),
+    duration: formatTime(activeElapsed).slice(3), // Temps actif HH:MM
+    totalDuration: formatTime(totalElapsed).slice(3), // NOUVEAU : Temps total HH:MM
+    track: sessionPositions,
+    notes: el('notesInput').value.trim()
+  };
+
+  const hist = JSON.parse(localStorage.getItem('kayakHistory')||'[]');
+  hist.unshift(session);
+  localStorage.setItem('kayakHistory', JSON.stringify(hist.slice(0,20)));
+
+  el('startBtn').disabled = false;
+  el('pauseBtn').disabled = true;
+  el('stopBtn').disabled = true;
+  el('pauseBtn').textContent = 'Pause';
+  showStatus('Session sauvegardée');
+
+  el('speedInst').textContent = '0.0';
+  el('timer').textContent = '00:00:00';
+  el('dist').textContent = '0.00';
+  el('speedAvg').textContent = '0.0';
+  el('speedMax').textContent = '0.0';
+  el('duration').textContent = '0:00';
+
+  totalDist = 0;
+  maxSpeed = 0;
+  sessionPositions = [];
+  currentSessionNotes = '';
+  lastPosition = null;
+  pausedTime = 0;
+
+  if(livePolyline){
+    livePolyline.remove();
+    livePolyline = null;
+  }
+  if(livePositionMarker){
+    livePositionMarker.remove();
+    livePositionMarker = null;
+  }
+
+  switchScreen('history');
+  startGPS();
+}
+
+function exportGPX(id){
+  const hist = JSON.parse(localStorage.getItem('kayakHistory')||'[]');
+  const session = hist.find(s => s.id === id);
+  if(!session ||!session.track || session.track.length === 0){
+    alert('Pas de trace GPS');
+    return;
+  }
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Kayak Tracker" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>Sortie Kayak ${session.date}</name></metadata><trk><trkseg>${session.track.map(p => ` <trkpt lat="${p.lat}" lon="${p.lon}"><ele>${p.ele}</ele><time>${p.time}</time></trkpt>`).join('\n')}</trkseg></trk></gpx>`;
+  const blob = new Blob([gpx], {type: 'application/gpx+xml'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `kayak-${session.date.replace(/[\/\s:]/g, '-')}.gpx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function drawHistoryMap(id, session){
+  if(!session.track || session.track.length < 2) return;
+
+  const mapId = `historyMap-${id}`;
+  const mapDiv = document.getElementById(mapId);
+
+  if(historyMaps[id]) {
+    historyMaps[id].remove();
+    delete historyMaps[id];
+  }
+
+  mapDiv.innerHTML = '';
+
+  const map = L.map(mapId, {zoomControl:false, attributionControl:false});
+  historyMaps[id] = map;
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+
+  const latlngs = session.track.map(p => [p.lat, p.lon]);
+  const polyline = L.polyline(latlngs, {
+    color:'#FF6B35',
+    weight:4,
+    opacity:0.9
+  }).addTo(map);
+
+  L.circleMarker(latlngs[0], {color:'#1DB954', radius:6}).addTo(map);
+  L.circleMarker(latlngs[latlngs.length-1], {color:'#E22134', radius:6}).addTo(map);
+
+  setTimeout(() => {
+    map.invalidateSize();
+    map.fitBounds(polyline.getBounds(), {padding:[20,20]});
+  }, 300);
+}
+
+function toggleMap(id){
+  const mapDiv = document.getElementById(`map-${id}`);
+  const isActive = mapDiv.classList.contains('active');
+
+  document.querySelectorAll('.map-container').forEach(div => {
+    div.classList.remove('active');
+    const childMapDiv = div.querySelector('.map');
+    if(childMapDiv){
+      const mapId = childMapDiv.id.replace('historyMap-', '');
+      if(historyMaps[mapId]){
+        historyMaps[mapId].remove();
+        delete historyMaps[mapId];
+        childMapDiv.innerHTML = '';
+      }
+    }
+  });
+
+  if (!isActive) {
+    mapDiv.classList.add('active');
+    setTimeout(() => {
+      const hist = JSON.parse(localStorage.getItem('kayakHistory')||'[]');
+      const session = hist.find(s => s.id === id);
+      if(session) {
+        drawHistoryMap(id, session);
+      }
+    }, 350);
+  }
+}
+
+window.toggleMap = toggleMap;
+window.drawHistoryMap = drawHistoryMap;
+window.exportGPX = exportGPX;
+window.deleteSession = deleteSession;
+
+function deleteSession(id){
+  if(!confirm('Supprimer cette sortie?')) return;
+  let hist = JSON.parse(localStorage.getItem('kayakHistory')||'[]');
+  hist = hist.filter(s => s.id!== id);
+  localStorage.setItem('kayakHistory', JSON.stringify(hist));
+  loadHistory();
+}
+
+function clearAllHistory(){
+  if(!confirm('Vider tout l’historique?')) return;
+  localStorage.removeItem('kayakHistory');
+  loadHistory();
+}
+
+function loadHistory(){
+  const hist = JSON.parse(localStorage.getItem('kayakHistory')||'[]');
+
+  const header = `
+    <div class="history-header-row">
+      <div>Date</div>
+      <div>Dist</div>
+      <div>Vit. moy.</div>
+      <div>Durée</div>
+    </div>
+  `;
+
+  el('history').innerHTML = header + hist.map(s => {
+    const safeNotes = s.notes? s.notes.replace(/`/g, '\\`').replace(/\$\{/g, '\\${') : '';
+    const dureeAAfficher = s.totalDuration || s.duration; // Utilise totalDuration si dispo
+    return `<div class="history-item">
+      <div class="history-header">
+        <div class="history-date">${s.date}</div>
+        <div class="history-stats">
+          <span>${s.distance} km</span>
+          <span>${s.avgSpeed} km/h</span>
+          <span>${dureeAAfficher}</span>
+        </div>
+        <div class="history-actions">
+          <button class="icon-btn view-btn" onclick="toggleMap(${s.id})">Carte</button>
+          <button class="icon-btn export-btn" onclick="exportGPX(${s.id})">GPX</button>
+          <button class="icon-btn delete-btn" onclick="deleteSession(${s.id})">🗑️</button>
+        </div>
+      </div>
+      <div class="map-container" id="map-${s.id}">
+        <div id="historyMap-${s.id}" class="map"></div>
+      </div>
+      ${safeNotes? `<div class="history-notes">${safeNotes}</div>` : ''}
+    </div>`;
+  }).join('') || '<div style="opacity:0.6;padding:40px 0;text-align:center">Aucune session</div>';
+}
+
+function loadCurrentNotes(){
+  el('notesInput').value = currentSessionNotes;
+  el('notesStatus').textContent = '';
+}
+
+function saveNotes(){
+  currentSessionNotes = el('notesInput').value;
+  el('notesStatus').textContent = 'Notes sauvegardées ✓';
+  setTimeout(() => el('notesStatus').textContent = '', 2000);
+}
+
+startGPS();
+updateClock();
+setInterval(updateClock, 60000);
+</script>
+</body>
+</html>
