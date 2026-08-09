@@ -541,8 +541,8 @@ async function stopTracking(){
     distance: (totalDist/1000).toFixed(2),
     avgSpeed: el('speedAvg').textContent,
     maxSpeed: maxSpeed.toFixed(1),
-    duration: formatTime(activeElapsed).slice(3), // Temps actif HH:MM
-    totalDuration: formatTime(totalElapsed).slice(3), // NOUVEAU : Temps total HH:MM
+    duration: formatTime(activeElapsed).slice(3), // Temps de course HH:MM
+    totalDuration: formatTime(totalElapsed).slice(3), // Temps total HH:MM
     track: sessionPositions,
     notes: el('notesInput').value.trim()
   };
@@ -700,7 +700,7 @@ function loadHistory(){
 
   el('history').innerHTML = header + hist.map(s => {
     const safeNotes = s.notes? s.notes.replace(/`/g, '\\`').replace(/\$\{/g, '\\${') : '';
-    const dureeAAfficher = s.totalDuration || s.duration; // Utilise totalDuration si dispo
+    const dureeAAfficher = s.duration; // MODIF : Temps de course uniquement, sans pauses
     return `<div class="history-item">
       <div class="history-header">
         <div class="history-date">${s.date}</div>
