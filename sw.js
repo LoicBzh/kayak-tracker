@@ -1,4 +1,4 @@
-const CACHE = 'kayak-v1'; // incrémente à chaque maj
+const CACHE = 'kayak-v2'; // incrémente à chaque maj
 const ASSETS = [
   './',
   './index.html',
